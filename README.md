@@ -37,7 +37,7 @@ section to your `docker-compose.yml` file to let Docker build this software for 
 ```yml
 version: '2' # Must be present exactly once at the beginning of the docker-compose.yml file
 services:    # Must be present exactly once at the beginning of the docker-compose.yml file
-    device-camera-pylon-amd64:
+    device-camera-spinnaker-amd64:
         build:
             context: https://github.com/chalmers-revere/opendlv-device-camera-spinnaker.git
             dockerfile: Dockerfile.amd64
