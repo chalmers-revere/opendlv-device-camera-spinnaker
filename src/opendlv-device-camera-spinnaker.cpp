@@ -138,8 +138,17 @@ int32_t main(int32_t argc, char **argv) {
           // Enable auto gain.
           camera->GainAuto.SetValue(Spinnaker::GainAutoEnums::GainAuto_Continuous);
 
-         // Enable auto white balance.
+          // Enable auto white balance.
           camera->BalanceWhiteAuto.SetValue(Spinnaker::BalanceWhiteAutoEnums::BalanceWhiteAuto_Continuous);
+
+          // Enable PTP.
+          camera->GevIEEE1588.SetValue(1);
+
+          // Define WIDTH, HEIGHT, OFFSETX, OFFSETY.
+          camera->Height.SetValue(HEIGHT);
+          camera->Width.SetValue(WIDTH);
+          camera->OffsetX.SetValue(OFFSET_X);
+          camera->OffsetY.SetValue(OFFSET_Y);
 
           // Accessing the low-level X11 data display.
           Display* display{nullptr};
@@ -166,48 +175,53 @@ int32_t main(int32_t argc, char **argv) {
 
           // Frame grabbing loop.
           while (!cluon::TerminateHandler::instance().isTerminated.load()) {
-              // TODO: Define dimensions.
               Spinnaker::ImagePtr image{camera->GetNextImage()};
-              if (!image->IsIncomplete()) {
+              if (Spinnaker::IMAGE_NO_ERROR == image->GetImageStatus()) {
                 uint64_t imageTimestamp = image->GetTimeStamp();
                 int width = image->GetWidth();
                 int height = image->GetHeight();
-                std::cout << "Grabbed frame of size " << width << "x" << height << " at " << imageTimestamp << std::endl;
 
+                std::cout << "Grabbed frame of size " << width << "x" << height << " at " << imageTimestamp << std::endl;
                 cluon::data::TimeStamp ts{cluon::time::now()};
 
-                Spinnaker::ImagePtr convertedImage{image->Convert(Spinnaker::PixelFormat_YUV422Packed, Spinnaker::HQ_LINEAR)};
+                if ( (static_cast<uint32_t>(width) == WIDTH) && 
+                     (static_cast<uint32_t>(height) == HEIGHT) ) {
+                  Spinnaker::ImagePtr convertedImage{image->Convert(Spinnaker::PixelFormat_YUV422Packed, Spinnaker::HQ_LINEAR)};
 
-                sharedMemoryI420->lock();
-                sharedMemoryI420->setTimeStamp(ts);
-                {
-                    libyuv::YUY2ToI420(reinterpret_cast<unsigned char*>(convertedImage->GetData()), WIDTH * 2 /* 2*WIDTH for YUYV 422*/,
-                                       reinterpret_cast<uint8_t*>(sharedMemoryI420->data()), WIDTH,
-                                       reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT)), WIDTH/2,
-                                       reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH/2,
-                                       WIDTH, HEIGHT);
+                  sharedMemoryI420->lock();
+                  sharedMemoryI420->setTimeStamp(ts);
+                  {
+                      libyuv::YUY2ToI420(reinterpret_cast<unsigned char*>(convertedImage->GetData()), WIDTH * 2 /* 2*WIDTH for YUYV 422*/,
+                                         reinterpret_cast<uint8_t*>(sharedMemoryI420->data()), WIDTH,
+                                         reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT)), WIDTH/2,
+                                         reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH/2,
+                                         WIDTH, HEIGHT);
+                  }
+                  sharedMemoryI420->unlock();
+
+                  sharedMemoryARGB->lock();
+                  sharedMemoryARGB->setTimeStamp(ts);
+                  {
+                      libyuv::I420ToARGB(reinterpret_cast<uint8_t*>(sharedMemoryI420->data()), WIDTH,
+                                         reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT)), WIDTH/2,
+                                         reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH/2,
+                                         reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), WIDTH * 4, WIDTH, HEIGHT);
+
+                      if (VERBOSE) {
+                          XPutImage(display, window, DefaultGC(display, 0), ximage, 0, 0, 0, 0, WIDTH, HEIGHT);
+                      }
+                  }
+                  sharedMemoryARGB->unlock();
+
+                  // Wake up any pending processes.
+                  sharedMemoryI420->notifyAll();
+                  sharedMemoryARGB->notifyAll();
+
+                  image->Release();
                 }
-                sharedMemoryI420->unlock();
-
-                sharedMemoryARGB->lock();
-                sharedMemoryARGB->setTimeStamp(ts);
-                {
-                    libyuv::I420ToARGB(reinterpret_cast<uint8_t*>(sharedMemoryI420->data()), WIDTH,
-                                       reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT)), WIDTH/2,
-                                       reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH/2,
-                                       reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), WIDTH * 4, WIDTH, HEIGHT);
-
-                    if (VERBOSE) {
-                        XPutImage(display, window, DefaultGC(display, 0), ximage, 0, 0, 0, 0, WIDTH, HEIGHT);
-                    }
+                else {
+                  std::cerr << "[opendlv-device-camera-spinnaker]: Grabbed frame of size " << width << "x" << height << " does not match size of shared memory!" << std::endl;
                 }
-                sharedMemoryARGB->unlock();
-
-                // Wake up any pending processes.
-                sharedMemoryI420->notifyAll();
-                sharedMemoryARGB->notifyAll();
-
-                image->Release();
               }
             }
 
