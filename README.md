@@ -51,7 +51,7 @@ services:    # Must be present exactly once at the beginning of the docker-compo
 
 The parameters to the application are:
 
-* `--camera=ID`: Numerical identifier for Spinnaker-compatible camera to be used
+* `--camera=ID`: Serial number for Spinnaker-compatible camera to be used
 * `--name.i420=XYZ`: Name of the shared memory for the I420 formatted image; when omitted, `cam0.i420` is chosen
 * `--name.argb=XYZ`: Name of the shared memory for the ARGB formatted image; when omitted, `cam0.argb` is chosen
 * `--width=W`: Desired width of a frame
