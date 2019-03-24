@@ -37,7 +37,7 @@ int32_t main(int32_t argc, char **argv) {
          (0 == commandlineArguments.count("height")) ) {
         std::cerr << argv[0] << " interfaces with a Pylon camera (given by the numerical identifier, e.g., 0) and provides the captured image in two shared memory areas: one in I420 format and one in ARGB format." << std::endl;
         std::cerr << "Usage:   " << argv[0] << " --camera=<identifier> --width=<width> --height=<height> [--name.i420=<unique name for the shared memory in I420 format>] [--name.argb=<unique name for the shared memory in ARGB format>] --width=W --height=H [--offsetX=X] [--offsetY=Y] [--packetsize=1500] [--fps=17] [--verbose]" << std::endl;
-        std::cerr << "         --camera:     numerical identifier for pylon-compatible camera to be used" << std::endl;
+        std::cerr << "         --camera:     serial number of Spinnaker-compatible camera to be used" << std::endl;
         std::cerr << "         --name.i420:  name of the shared memory for the I420 formatted image; when omitted, 'video0.i420' is chosen" << std::endl;
         std::cerr << "         --name.argb:  name of the shared memory for the I420 formatted image; when omitted, 'video0.argb' is chosen" << std::endl;
         std::cerr << "         --width:      desired width of a frame" << std::endl;
@@ -50,7 +50,7 @@ int32_t main(int32_t argc, char **argv) {
         retCode = 1;
     }
     else {
-        const uint32_t CAMERA{static_cast<uint32_t>((commandlineArguments.count("camera") != 0) ?std::stoi(commandlineArguments["camera"]) : 0)};
+        const std::string CAMERA{commandlineArguments["camera"]};
         const uint32_t WIDTH{static_cast<uint32_t>(std::stoi(commandlineArguments["width"]))};
         const uint32_t HEIGHT{static_cast<uint32_t>(std::stoi(commandlineArguments["height"]))};
         const uint32_t OFFSET_X{static_cast<uint32_t>((commandlineArguments.count("offsetX") != 0) ?std::stoi(commandlineArguments["offsetX"]) : 0)};
@@ -84,38 +84,104 @@ int32_t main(int32_t argc, char **argv) {
              (sharedMemoryARGB && sharedMemoryARGB->valid()) ) {
             std::clog << "[opendlv-device-camera-spinnaker]: Data from camera '" << commandlineArguments["camera"]<< "' available in I420 format in shared memory '" << sharedMemoryI420->name() << "' (" << sharedMemoryI420->size() << ") and in ARGB format in shared memory '" << sharedMemoryARGB->name() << "' (" << sharedMemoryARGB->size() << ")." << std::endl;
 
-            // TODO: Acquire any resources.
-            Spinnaker::SystemPtr system = Spinnaker::System::GetInstance();
-
-            // Accessing the low-level X11 data display.
-            Display* display{nullptr};
-            Visual* visual{nullptr};
-            Window window{0};
-            XImage* ximage{nullptr};
-            if (VERBOSE) {
-                display = XOpenDisplay(NULL);
-                visual = DefaultVisual(display, 0);
-                window = XCreateSimpleWindow(display, RootWindow(display, 0), 0, 0, WIDTH, HEIGHT, 1, 0, 0);
-                sharedMemoryARGB->lock();
-                {
-                    ximage = XCreateImage(display, visual, 24, ZPixmap, 0, sharedMemoryARGB->data(), WIDTH, HEIGHT, 32, 0);
-                }
-                sharedMemoryARGB->unlock();
-                XMapWindow(display, window);
+            // Open desired camera.
+            Spinnaker::SystemPtr system{Spinnaker::System::GetInstance()};
+            Spinnaker::CameraList listOfCameras{system->GetCameras()};
+            Spinnaker::CameraPtr camera{listOfCameras.GetBySerial(CAMERA)};
+            if (nullptr == camera) {
+              std::cerr << "[opendlv-device-camera-spinnaker]: Failed to open camera '" << CAMERA << "'." << std::endl;
+              return retCode = 1;
             }
+          camera->Init();
+          Spinnaker::GenApi::INodeMap &cameraNodeMap{camera->GetTLDeviceNodeMap()};
+          {
+            Spinnaker::GenApi::FeatureList_t features;
+            Spinnaker::GenApi::CCategoryPtr category{cameraNodeMap.GetNode("DeviceInformation")};
+            if (Spinnaker::GenApi::IsAvailable(category) && Spinnaker::GenApi::IsReadable(category)) {
+              category->GetFeatures(features);
+              for (auto it = features.begin(); it != features.end(); it++) {
+                Spinnaker::GenApi::CNodePtr featureNode{*it};
+                std::clog << "  " << featureNode->GetName() << ": ";
+                Spinnaker::GenApi::CValuePtr valuePtr = (Spinnaker::GenApi::CValuePtr)featureNode;
+                std::clog << (Spinnaker::GenApi::IsReadable(valuePtr) ? valuePtr->ToString() : "Node not readable");
+                std::clog << std::endl;
+              }
+            }
+            else {
+              std::cerr << "[opendlv-device-camera-spinnaker]: Could not read device control information." << std::endl;
+            }
+          }
 
-            std::vector<uint8_t> imageBuffer;
+          // Disable trigger mode.
+          {
+            if (Spinnaker::GenApi::RW != camera->TriggerMode.GetAccessMode()) {
+              std::cerr << "[opendlv-device-camera-spinnaker]: Could not disable trigger mode." << std::endl;
+              return retCode = 1;
+            }
+            camera->TriggerMode.SetValue(Spinnaker::TriggerModeEnums::TriggerMode_Off);
+          }
 
-            // Frame grabbing loop.
-            while (!cluon::TerminateHandler::instance().isTerminated.load()) {
-                // TODO: Grab frame.
+          // Disable auto frame rate.
+          {
+            Spinnaker::GenApi::CBooleanPtr acquisitionFrameRateEnable = cameraNodeMap.GetNode("AcquisitionFrameRateEnable");
+            if (!IsAvailable(acquisitionFrameRateEnable) || !IsReadable(acquisitionFrameRateEnable)) {
+              std::cerr << "[opendlv-device-camera-spinnaker]: Could not disable frame rate." << std::endl;
+              return retCode = 1;
+            }
+            acquisitionFrameRateEnable->SetValue(1);
+            camera->AcquisitionFrameRate.SetValue(FPS);
+          }
+
+          // Enable auto exposure.
+          camera->ExposureAuto.SetValue(Spinnaker::ExposureAutoEnums::ExposureAuto_Continuous);
+
+          // Enable auto gain.
+          camera->GainAuto.SetValue(Spinnaker::GainAutoEnums::GainAuto_Continuous);
+
+         // Enable auto white balance.
+          camera->BalanceWhiteAuto.SetValue(Spinnaker::BalanceWhiteAutoEnums::BalanceWhiteAuto_Continuous);
+
+          // Accessing the low-level X11 data display.
+          Display* display{nullptr};
+          Visual* visual{nullptr};
+          Window window{0};
+          XImage* ximage{nullptr};
+          if (VERBOSE) {
+              display = XOpenDisplay(NULL);
+              visual = DefaultVisual(display, 0);
+              window = XCreateSimpleWindow(display, RootWindow(display, 0), 0, 0, WIDTH, HEIGHT, 1, 0, 0);
+              sharedMemoryARGB->lock();
+              {
+                  ximage = XCreateImage(display, visual, 24, ZPixmap, 0, sharedMemoryARGB->data(), WIDTH, HEIGHT, 32, 0);
+              }
+              sharedMemoryARGB->unlock();
+              XMapWindow(display, window);
+          }
+
+          std::vector<uint8_t> imageBuffer;
+
+          // Start camera.
+          camera->AcquisitionMode.SetValue(Spinnaker::AcquisitionModeEnums::AcquisitionMode_Continuous);
+          camera->BeginAcquisition();
+
+          // Frame grabbing loop.
+          while (!cluon::TerminateHandler::instance().isTerminated.load()) {
+              // TODO: Define dimensions.
+              Spinnaker::ImagePtr image{camera->GetNextImage()};
+              if (!image->IsIncomplete()) {
+                uint64_t imageTimestamp = image->GetTimeStamp();
+                int width = image->GetWidth();
+                int height = image->GetHeight();
+                std::cout << "Grabbed frame of size " << width << "x" << height << " at " << imageTimestamp << std::endl;
 
                 cluon::data::TimeStamp ts{cluon::time::now()};
+
+                Spinnaker::ImagePtr convertedImage{image->Convert(Spinnaker::PixelFormat_YUV422Packed, Spinnaker::HQ_LINEAR)};
 
                 sharedMemoryI420->lock();
                 sharedMemoryI420->setTimeStamp(ts);
                 {
-                    libyuv::YUY2ToI420(imageBuffer.data(), WIDTH * 2 /* 2*WIDTH for YUYV 422*/,
+                    libyuv::YUY2ToI420(reinterpret_cast<unsigned char*>(convertedImage->GetData()), WIDTH * 2 /* 2*WIDTH for YUYV 422*/,
                                        reinterpret_cast<uint8_t*>(sharedMemoryI420->data()), WIDTH,
                                        reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT)), WIDTH/2,
                                        reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH/2,
@@ -140,9 +206,16 @@ int32_t main(int32_t argc, char **argv) {
                 // Wake up any pending processes.
                 sharedMemoryI420->notifyAll();
                 sharedMemoryARGB->notifyAll();
+
+                image->Release();
+              }
             }
 
+            camera->EndAcquisition();
+
             // Release any resources.
+            camera->DeInit();
+            listOfCameras.Clear();
             system->ReleaseInstance();
         }
         retCode = 0;
