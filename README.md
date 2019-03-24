@@ -42,7 +42,7 @@ services:    # Must be present exactly once at the beginning of the docker-compo
             context: https://github.com/chalmers-revere/opendlv-device-camera-spinnaker.git
             dockerfile: Dockerfile.amd64
         restart: on-failure
-        net: "host"
+        network_mode: "host"
         ipc: "host"
         volumes:
         - /tmp:/tmp
