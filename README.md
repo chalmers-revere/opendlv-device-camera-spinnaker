@@ -46,7 +46,7 @@ services:    # Must be present exactly once at the beginning of the docker-compo
         ipc: "host"
         volumes:
         - /tmp:/tmp
-        command: "--camera=0 --width=640 --height=480"
+        command: "--camera=0 --width=640 --height=480 --name.i420=ptg0.i420 --name.argb=ptg0.argb --verbose"
 ```
 
 The parameters to the application are:
