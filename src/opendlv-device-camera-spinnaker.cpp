@@ -142,7 +142,7 @@ int32_t main(int32_t argc, char **argv) {
           camera->BalanceWhiteAuto.SetValue(Spinnaker::BalanceWhiteAutoEnums::BalanceWhiteAuto_Continuous);
 
           // Enable PTP.
-          //camera->GevIEEE1588.SetValue(1);
+          //camera->GevIEEE1588.SetValue(true);
 
           // Define WIDTH, HEIGHT, OFFSETX, OFFSETY.
           camera->Height.SetValue(HEIGHT);
