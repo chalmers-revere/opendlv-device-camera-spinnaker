@@ -199,7 +199,7 @@ int32_t main(int32_t argc, char **argv) {
                   sharedMemoryI420->lock();
                   sharedMemoryI420->setTimeStamp(ts);
                   {
-                        libyuv::ARGBToI420(reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), WIDTH * 4 /* 4*WIDTH for ARGB*/,
+                        libyuv::ABGRToI420(reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), WIDTH * 4 /* 4*WIDTH for ARGB*/,
                                            reinterpret_cast<uint8_t*>(sharedMemoryI420->data()), WIDTH,
                                            reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT)), WIDTH/2,
                                            reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH/2,
