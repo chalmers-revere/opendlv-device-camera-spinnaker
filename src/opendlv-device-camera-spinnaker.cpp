@@ -166,6 +166,8 @@ int32_t main(int32_t argc, char **argv) {
               sharedMemoryARGB->unlock();
               XMapWindow(display, window);
           }
+          std::vector<uint8_t> temp;
+          temp.reserve(sharedMemoryARGB->size());
 
           // Start camera.
           camera->AcquisitionMode.SetValue(Spinnaker::AcquisitionModeEnums::AcquisitionMode_Continuous);
@@ -184,12 +186,15 @@ int32_t main(int32_t argc, char **argv) {
 
                 if ( (static_cast<uint32_t>(width) == WIDTH) && 
                      (static_cast<uint32_t>(height) == HEIGHT) ) {
-                  Spinnaker::ImagePtr convertedImage{image->Convert(Spinnaker::PixelFormat_BGRa8, Spinnaker::HQ_LINEAR)};
+                  Spinnaker::ImagePtr convertedImage{image->Convert(Spinnaker::PixelFormat_BGR8, Spinnaker::HQ_LINEAR)};
 
                   sharedMemoryARGB->lock();
                   sharedMemoryARGB->setTimeStamp(ts);
                   {
-                      std::memcpy(reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), convertedImage->GetData(), WIDTH*HEIGHT*4);
+                      libyuv::RGB24ToARGB(reinterpret_cast<uint8_t*>(convertedImage->GetData()), WIDTH * 3,
+                                          reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), WIDTH * 4 /* 4*WIDTH for ARGB*/,
+                                          WIDTH, HEIGHT);
+                      //std::memcpy(reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), convertedImage->GetData(), WIDTH*HEIGHT*4);
                       if (VERBOSE) {
                           XPutImage(display, window, DefaultGC(display, 0), ximage, 0, 0, 0, 0, WIDTH, HEIGHT);
                       }
@@ -199,7 +204,7 @@ int32_t main(int32_t argc, char **argv) {
                   sharedMemoryI420->lock();
                   sharedMemoryI420->setTimeStamp(ts);
                   {
-                        libyuv::ARGBToI420(reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), WIDTH * 4 /* 4*WIDTH for ARGB*/,
+                        libyuv::ABGRToI420(reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), WIDTH * 4 /* 4*WIDTH for ARGB*/,
                                            reinterpret_cast<uint8_t*>(sharedMemoryI420->data()), WIDTH,
                                            reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT)), WIDTH/2,
                                            reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH/2,
