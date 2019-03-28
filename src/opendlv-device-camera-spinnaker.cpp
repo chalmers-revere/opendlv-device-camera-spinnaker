@@ -127,8 +127,9 @@ int32_t main(int32_t argc, char **argv) {
           if (IsAvailable(ptrPixelFormat) && IsWritable(ptrPixelFormat)) {
             // Retrieve the desired entry node from the enumeration node
             Spinnaker::GenApi::CEnumEntryPtr ptrPixelFormatYUV = ptrPixelFormat->GetEntryByName("YUV422Packed");
+           // Spinnaker::GenApi::CEnumEntryPtr ptrPixelFormatYUV = ptrPixelFormat->GetEntryByName("BGR8");
             if (IsAvailable(ptrPixelFormatYUV) && IsReadable(ptrPixelFormatYUV) ) {
-                // Retrieve the integer value from the entry node
+                // Retrieve the integer value from the entry node:
                 int64_t pixelFormatYUV = ptrPixelFormatYUV ->GetValue();
 
                 // Set integer as new value for enumeration node
@@ -209,12 +210,13 @@ int32_t main(int32_t argc, char **argv) {
 
                 if ( (static_cast<uint32_t>(width) == WIDTH) && 
                      (static_cast<uint32_t>(height) == HEIGHT) ) {
-                  Spinnaker::ImagePtr convertedImage{image->Convert(Spinnaker::PixelFormat_YUV422Packed, Spinnaker::HQ_LINEAR)};
+//                  Spinnaker::ImagePtr convertedImage{image->Convert(Spinnaker::PixelFormat_YUV422Packed, Spinnaker::HQ_LINEAR)};
+                  //Spinnaker::ImagePtr convertedImage{image->Convert(Spinnaker::PixelFormat_YUV422_8_UYVY, Spinnaker::HQ_LINEAR)};
 
                 sharedMemoryI420->lock();
                 sharedMemoryI420->setTimeStamp(ts);
                 {
-                    libyuv::YUY2ToI420(reinterpret_cast<uint8_t*>(convertedImage->GetData()), WIDTH * 2 /* 2*WIDTH for YUYV 422*/,
+                    libyuv::UYVYToI420(reinterpret_cast<uint8_t*>(image->GetData()), WIDTH * 2 /* 2*WIDTH for YUYV 422*/,
                                        reinterpret_cast<uint8_t*>(sharedMemoryI420->data()), WIDTH,
                                        reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT)), WIDTH/2,
                                        reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH/2,
