@@ -181,7 +181,7 @@ int32_t main(int32_t argc, char **argv) {
                 int width = image->GetWidth();
                 int height = image->GetHeight();
 
-                std::cout << "Grabbed frame of size " << width << "x" << height << " at " << imageTimestamp << std::endl;
+                std::clog << "Grabbed frame of size " << width << "x" << height << " at " << imageTimestamp << std::endl;
                 cluon::data::TimeStamp ts{cluon::time::now()};
 
                 if ( (static_cast<uint32_t>(width) == WIDTH) && 
@@ -191,10 +191,9 @@ int32_t main(int32_t argc, char **argv) {
                   sharedMemoryARGB->lock();
                   sharedMemoryARGB->setTimeStamp(ts);
                   {
-                      libyuv::RGB24ToARGB(reinterpret_cast<uint8_t*>(convertedImage->GetData()), WIDTH * 3,
+                      libyuv::RGB24ToARGB(reinterpret_cast<uint8_t*>(convertedImage->GetData()), WIDTH * 3 /* 3*WIDTH for RGB*/,
                                           reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), WIDTH * 4 /* 4*WIDTH for ARGB*/,
                                           WIDTH, HEIGHT);
-                      //std::memcpy(reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), convertedImage->GetData(), WIDTH*HEIGHT*4);
                       if (VERBOSE) {
                           XPutImage(display, window, DefaultGC(display, 0), ximage, 0, 0, 0, 0, WIDTH, HEIGHT);
                       }
@@ -204,7 +203,7 @@ int32_t main(int32_t argc, char **argv) {
                   sharedMemoryI420->lock();
                   sharedMemoryI420->setTimeStamp(ts);
                   {
-                        libyuv::ABGRToI420(reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), WIDTH * 4 /* 4*WIDTH for ARGB*/,
+                        libyuv::ARGBToI420(reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), WIDTH * 4 /* 4*WIDTH for ARGB*/,
                                            reinterpret_cast<uint8_t*>(sharedMemoryI420->data()), WIDTH,
                                            reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT)), WIDTH/2,
                                            reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH/2,
