@@ -121,9 +121,32 @@ int32_t main(int32_t argc, char **argv) {
             camera->TriggerMode.SetValue(Spinnaker::TriggerModeEnums::TriggerMode_Off);
           }
 
+	  Spinnaker::GenApi::INodeMap &nodeMap = camera->GetNodeMap();
+	  Spinnaker::GenApi::CEnumerationPtr ptrPixelFormat = nodeMap.GetNode("PixelFormat");
+	  std::cout << "A: " << IsAvailable(ptrPixelFormat) << ", W: " << IsWritable(ptrPixelFormat) << std::endl;
+          if (IsAvailable(ptrPixelFormat) && IsWritable(ptrPixelFormat)) {
+            // Retrieve the desired entry node from the enumeration node
+            Spinnaker::GenApi::CEnumEntryPtr ptrPixelFormatYUV = ptrPixelFormat->GetEntryByName("YUV422Packed");
+            if (IsAvailable(ptrPixelFormatYUV) && IsReadable(ptrPixelFormatYUV) ) {
+                // Retrieve the integer value from the entry node
+                int64_t pixelFormatYUV = ptrPixelFormatYUV ->GetValue();
+
+                // Set integer as new value for enumeration node
+                ptrPixelFormat->SetIntValue(pixelFormatYUV );
+
+		std::cout << "Pixel format set to " << ptrPixelFormat->GetCurrentEntry()->GetSymbolic() << "..." << std::endl;
+            }
+            else {
+		    std::cout << "Pixel format YUV4xx not available..." << std::endl;
+            }
+          }
+          else {
+		  std::cout << "Pixel format not available..." << std::endl;
+          }
+
           // Disable auto frame rate.
           {
-            Spinnaker::GenApi::CBooleanPtr acquisitionFrameRateEnable = cameraNodeMap.GetNode("AcquisitionFrameRateEnable");
+            Spinnaker::GenApi::CBooleanPtr acquisitionFrameRateEnable = nodeMap.GetNode("AcquisitionFrameRateEnable");
             if (!IsAvailable(acquisitionFrameRateEnable) || !IsReadable(acquisitionFrameRateEnable)) {
               std::cerr << "[opendlv-device-camera-spinnaker]: Could not disable frame rate." << std::endl;
               //return retCode = 1;
@@ -186,31 +209,32 @@ int32_t main(int32_t argc, char **argv) {
 
                 if ( (static_cast<uint32_t>(width) == WIDTH) && 
                      (static_cast<uint32_t>(height) == HEIGHT) ) {
-                  Spinnaker::ImagePtr convertedImage{image->Convert(Spinnaker::PixelFormat_BGR8, Spinnaker::HQ_LINEAR)};
+                  Spinnaker::ImagePtr convertedImage{image->Convert(Spinnaker::PixelFormat_YUV422Packed, Spinnaker::HQ_LINEAR)};
 
-                  sharedMemoryARGB->lock();
-                  sharedMemoryARGB->setTimeStamp(ts);
-                  {
-                      libyuv::RGB24ToARGB(reinterpret_cast<uint8_t*>(convertedImage->GetData()), WIDTH * 3 /* 3*WIDTH for RGB*/,
-                                          reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), WIDTH * 4 /* 4*WIDTH for ARGB*/,
-                                          WIDTH, HEIGHT);
-                      if (VERBOSE) {
-                          XPutImage(display, window, DefaultGC(display, 0), ximage, 0, 0, 0, 0, WIDTH, HEIGHT);
-                      }
-                  }
-                  sharedMemoryARGB->unlock();
+                sharedMemoryI420->lock();
+                sharedMemoryI420->setTimeStamp(ts);
+                {
+                    libyuv::YUY2ToI420(reinterpret_cast<uint8_t*>(convertedImage->GetData()), WIDTH * 2 /* 2*WIDTH for YUYV 422*/,
+                                       reinterpret_cast<uint8_t*>(sharedMemoryI420->data()), WIDTH,
+                                       reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT)), WIDTH/2,
+                                       reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH/2,
+                                       WIDTH, HEIGHT);
+                }
+                sharedMemoryI420->unlock();
 
-                  sharedMemoryI420->lock();
-                  sharedMemoryI420->setTimeStamp(ts);
-                  {
-                        libyuv::ARGBToI420(reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), WIDTH * 4 /* 4*WIDTH for ARGB*/,
-                                           reinterpret_cast<uint8_t*>(sharedMemoryI420->data()), WIDTH,
-                                           reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT)), WIDTH/2,
-                                           reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH/2,
-                                           WIDTH, HEIGHT);
-                  }
-                  sharedMemoryI420->unlock();
+                sharedMemoryARGB->lock();
+                sharedMemoryARGB->setTimeStamp(ts);
+                {
+                    libyuv::I420ToARGB(reinterpret_cast<uint8_t*>(sharedMemoryI420->data()), WIDTH,
+                                       reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT)), WIDTH/2,
+                                       reinterpret_cast<uint8_t*>(sharedMemoryI420->data()+(WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH/2,
+                                       reinterpret_cast<uint8_t*>(sharedMemoryARGB->data()), WIDTH * 4, WIDTH, HEIGHT);
 
+                    if (VERBOSE) {
+                        XPutImage(display, window, DefaultGC(display, 0), ximage, 0, 0, 0, 0, WIDTH, HEIGHT);
+                    }
+                }
+                sharedMemoryARGB->unlock();
 
                   // Wake up any pending processes.
                   sharedMemoryI420->notifyAll();
