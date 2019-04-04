@@ -92,58 +92,58 @@ int32_t main(int32_t argc, char **argv) {
               std::cerr << "[opendlv-device-camera-spinnaker]: Failed to open camera '" << CAMERA << "'." << std::endl;
               return retCode = 1;
             }
-          camera->Init();
-          Spinnaker::GenApi::INodeMap &cameraNodeMap{camera->GetTLDeviceNodeMap()};
-          {
-            Spinnaker::GenApi::FeatureList_t features;
-            Spinnaker::GenApi::CCategoryPtr category{cameraNodeMap.GetNode("DeviceInformation")};
-            if (Spinnaker::GenApi::IsAvailable(category) && Spinnaker::GenApi::IsReadable(category)) {
-              category->GetFeatures(features);
-              for (auto it = features.begin(); it != features.end(); it++) {
-                Spinnaker::GenApi::CNodePtr featureNode{*it};
-                std::clog << "  " << featureNode->GetName() << ": ";
-                Spinnaker::GenApi::CValuePtr valuePtr = (Spinnaker::GenApi::CValuePtr)featureNode;
-                std::clog << (Spinnaker::GenApi::IsReadable(valuePtr) ? valuePtr->ToString() : "Node not readable");
-                std::clog << std::endl;
+            camera->Init();
+
+            Spinnaker::GenApi::INodeMap &cameraNodeMap{camera->GetTLDeviceNodeMap()};
+            {
+              Spinnaker::GenApi::FeatureList_t features;
+              Spinnaker::GenApi::CCategoryPtr category{cameraNodeMap.GetNode("DeviceInformation")};
+              if (Spinnaker::GenApi::IsAvailable(category) && Spinnaker::GenApi::IsReadable(category)) {
+                category->GetFeatures(features);
+                for (auto it = features.begin(); it != features.end(); it++) {
+                  Spinnaker::GenApi::CNodePtr featureNode{*it};
+                  std::clog << "  " << featureNode->GetName() << ": ";
+                  Spinnaker::GenApi::CValuePtr valuePtr = (Spinnaker::GenApi::CValuePtr)featureNode;
+                  std::clog << (Spinnaker::GenApi::IsReadable(valuePtr) ? valuePtr->ToString() : "Node not readable");
+                  std::clog << std::endl;
+                }
+              }
+              else {
+                std::cerr << "[opendlv-device-camera-spinnaker]: Could not read device control information." << std::endl;
+              }
+            }
+
+            // Disable trigger mode.
+            {
+              if (Spinnaker::GenApi::RW != camera->TriggerMode.GetAccessMode()) {
+                std::cerr << "[opendlv-device-camera-spinnaker]: Could not disable trigger mode." << std::endl;
+                return retCode = 1;
+              }
+              camera->TriggerMode.SetValue(Spinnaker::TriggerModeEnums::TriggerMode_Off);
+            }
+
+            Spinnaker::GenApi::INodeMap &nodeMap = camera->GetNodeMap();
+            Spinnaker::GenApi::CEnumerationPtr ptrPixelFormat = nodeMap.GetNode("PixelFormat");
+            if (IsAvailable(ptrPixelFormat) && IsWritable(ptrPixelFormat)) {
+              // Retrieve the desired entry node from the enumeration node
+              Spinnaker::GenApi::CEnumEntryPtr ptrPixelFormatYUV = ptrPixelFormat->GetEntryByName("YUV422Packed");
+             // Spinnaker::GenApi::CEnumEntryPtr ptrPixelFormatYUV = ptrPixelFormat->GetEntryByName("BGR8");
+              if (IsAvailable(ptrPixelFormatYUV) && IsReadable(ptrPixelFormatYUV) ) {
+                  // Retrieve the integer value from the entry node:
+                  int64_t pixelFormatYUV = ptrPixelFormatYUV ->GetValue();
+
+                  // Set integer as new value for enumeration node
+                  ptrPixelFormat->SetIntValue(pixelFormatYUV );
+
+                  std::cout << "Pixel format set to " << ptrPixelFormat->GetCurrentEntry()->GetSymbolic() << "..." << std::endl;
+              }
+              else {
+                  std::cout << "Pixel format YUV4xx not available..." << std::endl;
               }
             }
             else {
-              std::cerr << "[opendlv-device-camera-spinnaker]: Could not read device control information." << std::endl;
+                std::cout << "Pixel format not available..." << std::endl;
             }
-          }
-
-          // Disable trigger mode.
-          {
-            if (Spinnaker::GenApi::RW != camera->TriggerMode.GetAccessMode()) {
-              std::cerr << "[opendlv-device-camera-spinnaker]: Could not disable trigger mode." << std::endl;
-              return retCode = 1;
-            }
-            camera->TriggerMode.SetValue(Spinnaker::TriggerModeEnums::TriggerMode_Off);
-          }
-
-	  Spinnaker::GenApi::INodeMap &nodeMap = camera->GetNodeMap();
-	  Spinnaker::GenApi::CEnumerationPtr ptrPixelFormat = nodeMap.GetNode("PixelFormat");
-	  std::cout << "A: " << IsAvailable(ptrPixelFormat) << ", W: " << IsWritable(ptrPixelFormat) << std::endl;
-          if (IsAvailable(ptrPixelFormat) && IsWritable(ptrPixelFormat)) {
-            // Retrieve the desired entry node from the enumeration node
-            Spinnaker::GenApi::CEnumEntryPtr ptrPixelFormatYUV = ptrPixelFormat->GetEntryByName("YUV422Packed");
-           // Spinnaker::GenApi::CEnumEntryPtr ptrPixelFormatYUV = ptrPixelFormat->GetEntryByName("BGR8");
-            if (IsAvailable(ptrPixelFormatYUV) && IsReadable(ptrPixelFormatYUV) ) {
-                // Retrieve the integer value from the entry node:
-                int64_t pixelFormatYUV = ptrPixelFormatYUV ->GetValue();
-
-                // Set integer as new value for enumeration node
-                ptrPixelFormat->SetIntValue(pixelFormatYUV );
-
-		std::cout << "Pixel format set to " << ptrPixelFormat->GetCurrentEntry()->GetSymbolic() << "..." << std::endl;
-            }
-            else {
-		    std::cout << "Pixel format YUV4xx not available..." << std::endl;
-            }
-          }
-          else {
-		  std::cout << "Pixel format not available..." << std::endl;
-          }
 
           // Disable auto frame rate.
           {
@@ -210,9 +210,6 @@ int32_t main(int32_t argc, char **argv) {
 
                 if ( (static_cast<uint32_t>(width) == WIDTH) && 
                      (static_cast<uint32_t>(height) == HEIGHT) ) {
-//                  Spinnaker::ImagePtr convertedImage{image->Convert(Spinnaker::PixelFormat_YUV422Packed, Spinnaker::HQ_LINEAR)};
-                  //Spinnaker::ImagePtr convertedImage{image->Convert(Spinnaker::PixelFormat_YUV422_8_UYVY, Spinnaker::HQ_LINEAR)};
-
                 sharedMemoryI420->lock();
                 sharedMemoryI420->setTimeStamp(ts);
                 {
