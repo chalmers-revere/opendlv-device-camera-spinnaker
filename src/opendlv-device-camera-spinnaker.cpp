@@ -36,12 +36,12 @@ int32_t main(int32_t argc, char **argv) {
          (0 == commandlineArguments.count("width")) ||
          (0 == commandlineArguments.count("height")) ) {
         std::cerr << argv[0] << " interfaces with a Pylon camera (given by the numerical identifier, e.g., 0) and provides the captured image in two shared memory areas: one in I420 format and one in ARGB format." << std::endl;
-        std::cerr << "Usage:   " << argv[0] << " --camera=<identifier> --width=<width> --height=<height> [--name.i420=<unique name for the shared memory in I420 format>] [--name.argb=<unique name for the shared memory in ARGB format>] --width=W --height=H [--offsetX=X] [--offsetY=Y] [--packetsize=1500] [--fps=17] [--verbose]" << std::endl;
+        std::cerr << "Usage:   " << argv[0] << " --camera=<identifier> --width=<width> --height=<height> [--name.i420=<unique name for the shared memory in I420 format>] [--name.argb=<unique name for the shared memory in ARGB format>] [--offsetX=X] [--offsetY=Y] [--packetsize=1500] [--fps=17] [--verbose]" << std::endl;
         std::cerr << "         --camera:     Identifier of Spinnaker-compatible camera to be used" << std::endl;
-        std::cerr << "         --name.i420:  name of the shared memory for the I420 formatted image; when omitted, 'video0.i420' is chosen" << std::endl;
-        std::cerr << "         --name.argb:  name of the shared memory for the I420 formatted image; when omitted, 'video0.argb' is chosen" << std::endl;
         std::cerr << "         --width:      desired width of a frame" << std::endl;
         std::cerr << "         --height:     desired height of a frame" << std::endl;
+        std::cerr << "         --name.i420:  name of the shared memory for the I420 formatted image; when omitted, 'video0.i420' is chosen" << std::endl;
+        std::cerr << "         --name.argb:  name of the shared memory for the I420 formatted image; when omitted, 'video0.argb' is chosen" << std::endl;
         std::cerr << "         --offsetX:    X for desired ROI (default: 0)" << std::endl;
         std::cerr << "         --offsetY:    Y for desired ROI (default: 0)" << std::endl;
         std::cerr << "         --fps:        desired acquisition frame rate (depends on bandwidth)" << std::endl;
