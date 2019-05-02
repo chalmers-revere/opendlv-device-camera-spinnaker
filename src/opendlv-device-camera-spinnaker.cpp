@@ -84,6 +84,23 @@ int32_t main(int32_t argc, char **argv) {
 
             // Open desired camera.
             Spinnaker::SystemPtr system{Spinnaker::System::GetInstance()};
+            Spinnaker::InterfaceList listOfInterfaces{system->GetInterfaces()};
+            {
+                Spinnaker::InterfacePtr interfacePtr{NULL};
+                for(uint32_t i{0}; i < listOfInterfaces.GetSize(); i++) {
+                    interfacePtr = listOfInterfaces.GetByIndex(i);
+                    interfacePtr->UpdateCameras();
+                    {
+                        using namespace std::literals::chrono_literals;
+                        std::this_thread::sleep_for(1s);
+                    }
+                    {
+                        Spinnaker::CameraList camList = interfacePtr->GetCameras();
+                        std::cerr << "Found " << camList.GetSize() << " on interface " << i << std::endl;
+                    }
+                }
+                interfacePtr = NULL;
+            }
             Spinnaker::CameraList listOfCameras{system->GetCameras()};
             Spinnaker::CameraPtr camera{listOfCameras.GetByIndex(CAMERA)};
             if (nullptr == camera) {
@@ -236,18 +253,19 @@ int32_t main(int32_t argc, char **argv) {
                         // Wake up any pending processes.
                         sharedMemoryI420->notifyAll();
                         sharedMemoryARGB->notifyAll();
-
-                        image->Release();
                     } else {
                         std::cerr << "[opendlv-device-camera-spinnaker]: Grabbed frame of size " << width << "x" << height << " does not match size of shared memory!" << std::endl;
                     }
                 }
+                image->Release();
             }
 
             camera->EndAcquisition();
 
             // Release any resources.
             camera->DeInit();
+            camera = NULL;
+            listOfInterfaces.Clear();
             listOfCameras.Clear();
             system->ReleaseInstance();
         }
