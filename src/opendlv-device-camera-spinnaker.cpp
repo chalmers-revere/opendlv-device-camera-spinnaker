@@ -85,8 +85,9 @@ int32_t main(int32_t argc, char **argv) {
             // Open desired camera.
             Spinnaker::SystemPtr system{Spinnaker::System::GetInstance()};
             Spinnaker::InterfaceList listOfInterfaces{system->GetInterfaces()};
+            Spinnaker::CameraPtr camera{nullptr};
             {
-                Spinnaker::InterfacePtr interfacePtr{NULL};
+                Spinnaker::InterfacePtr interfacePtr{nullptr};
                 for(uint32_t i{0}; i < listOfInterfaces.GetSize(); i++) {
                     interfacePtr = listOfInterfaces.GetByIndex(i);
                     interfacePtr->UpdateCameras();
@@ -95,19 +96,35 @@ int32_t main(int32_t argc, char **argv) {
                         std::this_thread::sleep_for(1s);
                     }
                     {
-                        Spinnaker::CameraList camList = interfacePtr->GetCameras();
-                        std::cerr << "Found " << camList.GetSize() << " on interface " << i << std::endl;
+                        Spinnaker::CameraList listOfCameras{interfacePtr->GetCameras()};
+                        for(uint32_t j{0}; j < listOfCameras.GetSize(); j++) {
+                            try {
+                                Spinnaker::CameraPtr cam{listOfCameras.GetByIndex(j)};
+                                Spinnaker::GenApi::INodeMap &cameraNodeMap{cam->GetTLDeviceNodeMap()};
+                                Spinnaker::GenApi::CStringPtr ptrDeviceSerialNumber{cameraNodeMap.GetNode("DeviceSerialNumber")};
+                                if (Spinnaker::GenApi::IsAvailable(ptrDeviceSerialNumber) && Spinnaker::GenApi::IsReadable(ptrDeviceSerialNumber)) {
+                                    std::string serialNumber{ptrDeviceSerialNumber->ToString()};
+                                    std::cout << "Serial Number: " << serialNumber << std::endl;
+                                    uint32_t foundSerialNumber{static_cast<uint32_t>(std::stoi(serialNumber))};
+                                    if (CAMERA == foundSerialNumber) {
+                                        camera = cam;
+                                        camera->Init();
+                                        std::cerr << "Found " << foundSerialNumber << " on interface " << i << std::endl;
+                                        break;
+                                    }
+                                }
+                            }
+                            catch (...) {
+                                camera = nullptr;
+                            }
+                        }
                     }
                 }
-                interfacePtr = NULL;
             }
-            Spinnaker::CameraList listOfCameras{system->GetCameras()};
-            Spinnaker::CameraPtr camera{listOfCameras.GetByIndex(CAMERA)};
             if (nullptr == camera) {
                 std::cerr << "[opendlv-device-camera-spinnaker]: Failed to open camera '" << CAMERA << "'." << std::endl;
                 return retCode = 1;
             }
-            camera->Init();
 
             Spinnaker::GenApi::INodeMap &cameraNodeMap{camera->GetTLDeviceNodeMap()};
             {
@@ -266,7 +283,6 @@ int32_t main(int32_t argc, char **argv) {
             camera->DeInit();
             camera = NULL;
             listOfInterfaces.Clear();
-            listOfCameras.Clear();
             system->ReleaseInstance();
         }
         retCode = 0;
