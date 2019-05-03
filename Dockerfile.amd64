@@ -36,13 +36,14 @@ RUN cd /tmp && \
     git clone --depth 1 https://chromium.googlesource.com/libyuv/libyuv && \
     cd libyuv &&\
     make -f linux.mk libyuv.a && cp libyuv.a /usr/lib && cd include && cp -r * /usr/include
-RUN cd /tmp && \
-    wget -O spinnaker.tar.gz https://eu.ptgrey.com/support/downloads/11209 && \
-    tar xvzf spinnaker.tar.gz && \
+ADD . /opt/sources
+WORKDIR /opt/sources
+RUN cp spinnaker-1.21.0.61-amd64-Ubuntu18.04-pkg.tar /tmp && \
+    cd /tmp && \
+    tar xvf spinnaker-1.21.0.61-amd64-Ubuntu18.04-pkg.tar && \
     cd spinnaker-* && \
     dpkg -i libspinnaker-*.deb && \
     cp libspinnaker-*_amd64.deb /tmp
-ADD . /opt/sources
 WORKDIR /opt/sources
 RUN mkdir build && \
     cd build && \
