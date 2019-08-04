@@ -39,7 +39,7 @@ version: '2' # Must be present exactly once at the beginning of the docker-compo
 services:    # Must be present exactly once at the beginning of the docker-compose.yml file
     device-camera-spinnaker-amd64:
         build:
-            context: https://github.com/chalmers-revere/opendlv-device-camera-spinnaker.git
+            context: https://github.com/chalmers-revere/opendlv-device-camera-spinnaker.git#v0.0.3
             dockerfile: Dockerfile.amd64
         restart: on-failure
         network_mode: "host"
