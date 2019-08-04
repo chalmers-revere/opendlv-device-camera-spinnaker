@@ -38,9 +38,9 @@ RUN cd /tmp && \
     make -f linux.mk libyuv.a && cp libyuv.a /usr/lib && cd include && cp -r * /usr/include
 ADD . /opt/sources
 WORKDIR /opt/sources
-RUN cp spinnaker-1.21.0.61-amd64-Ubuntu18.04-pkg.tar /tmp && \
+RUN cp spinnaker-1.24.0.60-amd64-Ubuntu16.04-pkg.tar /tmp && \
     cd /tmp && \
-    tar xvf spinnaker-1.21.0.61-amd64-Ubuntu18.04-pkg.tar && \
+    tar xvf spinnaker-1.24.0.60-amd64-Ubuntu16.04-pkg.tar && \
     cd spinnaker-* && \
     dpkg -i libspinnaker-*.deb && \
     cp libspinnaker-*_amd64.deb /tmp
