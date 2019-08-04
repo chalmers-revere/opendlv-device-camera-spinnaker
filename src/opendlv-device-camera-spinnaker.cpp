@@ -36,7 +36,7 @@ int32_t main(int32_t argc, char **argv) {
          (0 == commandlineArguments.count("width")) ||
          (0 == commandlineArguments.count("height")) ) {
         std::cerr << argv[0] << " interfaces with a Pylon camera (given by the numerical identifier, e.g., 0) and provides the captured image in two shared memory areas: one in I420 format and one in ARGB format." << std::endl;
-        std::cerr << "Usage:   " << argv[0] << " --camera=<identifier> --width=<width> --height=<height> [--name.i420=<unique name for the shared memory in I420 format>] [--name.argb=<unique name for the shared memory in ARGB format>] --width=W --height=H [--offsetX=X] [--offsetY=Y] [--packetsize=1500] [--fps=17] [--verbose]" << std::endl;
+        std::cerr << "Usage:   " << argv[0] << " --camera=<identifier> --width=<width> --height=<height> [--name.i420=<unique name for the shared memory in I420 format>] [--name.argb=<unique name for the shared memory in ARGB format>] --width=W --height=H [--offsetX=X] [--offsetY=Y] [--packetsize=1500] [--fps=17] [--skip.argb] [--verbose]" << std::endl;
         std::cerr << "         --camera:     Identifier of Spinnaker-compatible camera to be used" << std::endl;
         std::cerr << "         --name.i420:  name of the shared memory for the I420 formatted image; when omitted, 'video0.i420' is chosen" << std::endl;
         std::cerr << "         --name.argb:  name of the shared memory for the I420 formatted image; when omitted, 'video0.argb' is chosen" << std::endl;
@@ -45,7 +45,10 @@ int32_t main(int32_t argc, char **argv) {
         std::cerr << "         --offsetX:    X for desired ROI (default: 0)" << std::endl;
         std::cerr << "         --offsetY:    Y for desired ROI (default: 0)" << std::endl;
         std::cerr << "         --fps:        desired acquisition frame rate (depends on bandwidth)" << std::endl;
+        std::cerr << "         --skip.argb:  do not transform image to ARGB" << std::endl;
+        std::cerr << "         --nocameratimestamp:  do not use timestamp from camera but the local time" << std::endl;
         std::cerr << "         --verbose:    display captured image" << std::endl;
+        std::cerr << "         --debug:      debug output" << std::endl;
         std::cerr << "Example: " << argv[0] << " --camera=0 --width=640 --height=480 --verbose" << std::endl;
         retCode = 1;
     } else {
@@ -55,7 +58,10 @@ int32_t main(int32_t argc, char **argv) {
         const uint32_t OFFSET_X{static_cast<uint32_t>((commandlineArguments.count("offsetX") != 0) ? std::stoi(commandlineArguments["offsetX"]) : 0)};
         const uint32_t OFFSET_Y{static_cast<uint32_t>((commandlineArguments.count("offsetY") != 0) ? std::stoi(commandlineArguments["offsetY"]) : 0)};
         const float FPS{static_cast<float>((commandlineArguments.count("fps") != 0) ? std::stof(commandlineArguments["fps"]) : 17)};
+        const bool SKIP_ARGB{commandlineArguments.count("skip.argb") != 0};
+        const bool NOCAMERATIMESTAMP{commandlineArguments.count("nocameratimestamp") != 0};
         const bool VERBOSE{commandlineArguments.count("verbose") != 0};
+        const bool DEBUG{commandlineArguments.count("debug") != 0};
 
         // Set up the names for the shared memory areas.
         std::string NAME_I420{"video0.i420"};
@@ -237,8 +243,13 @@ int32_t main(int32_t argc, char **argv) {
                     int width               = image->GetWidth();
                     int height              = image->GetHeight();
 
-                    std::clog << "Grabbed frame of size " << width << "x" << height << " at " << imageTimestamp << std::endl;
+                    if (DEBUG) {
+                        std::clog << "Grabbed frame of size " << width << "x" << height << " at " << imageTimestamp << std::endl;
+                    }
                     cluon::data::TimeStamp ts{cluon::time::now()};
+		    if (!NOCAMERATIMESTAMP) {
+                        ts = cluon::time::fromMicroseconds(imageTimestamp/1000);
+		    }
 
                     if ((static_cast<uint32_t>(width) == WIDTH) && (static_cast<uint32_t>(height) == HEIGHT)) {
                         sharedMemoryI420->lock();
@@ -252,20 +263,22 @@ int32_t main(int32_t argc, char **argv) {
                         }
                         sharedMemoryI420->unlock();
 
-                        sharedMemoryARGB->lock();
-                        sharedMemoryARGB->setTimeStamp(ts);
-                        {
-                            libyuv::I420ToARGB(reinterpret_cast<uint8_t *>(sharedMemoryI420->data()), WIDTH,
-                                               reinterpret_cast<uint8_t *>(sharedMemoryI420->data() + (WIDTH * HEIGHT)), WIDTH / 2,
-                                               reinterpret_cast<uint8_t *>(sharedMemoryI420->data() + (WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH / 2,
-                                               reinterpret_cast<uint8_t *>(sharedMemoryARGB->data()), WIDTH * 4,
-                                               WIDTH, HEIGHT);
+                        if (!SKIP_ARGB || VERBOSE) {
+                            sharedMemoryARGB->lock();
+                            sharedMemoryARGB->setTimeStamp(ts);
+                            {
+                                libyuv::I420ToARGB(reinterpret_cast<uint8_t *>(sharedMemoryI420->data()), WIDTH,
+                                                   reinterpret_cast<uint8_t *>(sharedMemoryI420->data() + (WIDTH * HEIGHT)), WIDTH / 2,
+                                                   reinterpret_cast<uint8_t *>(sharedMemoryI420->data() + (WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH / 2,
+                                                   reinterpret_cast<uint8_t *>(sharedMemoryARGB->data()), WIDTH * 4,
+                                                   WIDTH, HEIGHT);
 
-                            if (VERBOSE) {
-                                XPutImage(display, window, DefaultGC(display, 0), ximage, 0, 0, 0, 0, WIDTH, HEIGHT);
+                                if (VERBOSE) {
+                                    XPutImage(display, window, DefaultGC(display, 0), ximage, 0, 0, 0, 0, WIDTH, HEIGHT);
+                                }
                             }
+                            sharedMemoryARGB->unlock();
                         }
-                        sharedMemoryARGB->unlock();
 
                         // Wake up any pending processes.
                         sharedMemoryI420->notifyAll();
