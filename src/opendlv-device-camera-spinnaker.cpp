@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019  Christian Berger
+ * Copyright (C) 2019-2021  Christian Berger
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -45,6 +45,7 @@ int32_t main(int32_t argc, char **argv) {
         std::cerr << "         --offsetX:    X for desired ROI (default: 0)" << std::endl;
         std::cerr << "         --offsetY:    Y for desired ROI (default: 0)" << std::endl;
         std::cerr << "         --fps:        desired acquisition frame rate (depends on bandwidth)" << std::endl;
+        std::cerr << "         --monochrome: monochrome (mono8) input frame" << std::endl;
         std::cerr << "         --skip.argb:  do not transform image to ARGB" << std::endl;
         std::cerr << "         --nocameratimestamp:  do not use timestamp from camera but the local time" << std::endl;
         std::cerr << "         --verbose:    display captured image" << std::endl;
@@ -60,6 +61,7 @@ int32_t main(int32_t argc, char **argv) {
         const float FPS{static_cast<float>((commandlineArguments.count("fps") != 0) ? std::stof(commandlineArguments["fps"]) : 17)};
         const bool SKIP_ARGB{commandlineArguments.count("skip.argb") != 0};
         const bool NOCAMERATIMESTAMP{commandlineArguments.count("nocameratimestamp") != 0};
+        const bool MONO8{commandlineArguments.count("monochrome") != 0};
         const bool VERBOSE{commandlineArguments.count("verbose") != 0};
         const bool DEBUG{commandlineArguments.count("debug") != 0};
 
@@ -163,17 +165,33 @@ int32_t main(int32_t argc, char **argv) {
             Spinnaker::GenApi::CEnumerationPtr ptrPixelFormat = nodeMap.GetNode("PixelFormat");
             if (IsAvailable(ptrPixelFormat) && IsWritable(ptrPixelFormat)) {
                 // Retrieve the desired entry node from the enumeration node
-                Spinnaker::GenApi::CEnumEntryPtr ptrPixelFormatYUV = ptrPixelFormat->GetEntryByName("YUV422Packed");
-                if (IsAvailable(ptrPixelFormatYUV) && IsReadable(ptrPixelFormatYUV)) {
-                    // Retrieve the integer value from the entry node:
-                    int64_t pixelFormatYUV = ptrPixelFormatYUV->GetValue();
+                if (MONO8) {
+                    Spinnaker::GenApi::CEnumEntryPtr ptrPixelFormatYUV = ptrPixelFormat->GetEntryByName("Mono8");
+                    if (IsAvailable(ptrPixelFormatYUV) && IsReadable(ptrPixelFormatYUV)) {
+                        // Retrieve the integer value from the entry node:
+                        int64_t pixelFormatYUV = ptrPixelFormatYUV->GetValue();
 
-                    // Set integer as new value for enumeration node
-                    ptrPixelFormat->SetIntValue(pixelFormatYUV);
+                        // Set integer as new value for enumeration node
+                        ptrPixelFormat->SetIntValue(pixelFormatYUV);
 
-                    std::clog << "[opendlv-device-camera-spinnaker]: Pixel format set to " << ptrPixelFormat->GetCurrentEntry()->GetSymbolic() << "." << std::endl;
-                } else {
-                    std::cerr << "[opendlv-device-camera-spinnaker]: Error: Pixel format YUV422Packed not available." << std::endl;
+                        std::clog << "[opendlv-device-camera-spinnaker]: Pixel format set to " << ptrPixelFormat->GetCurrentEntry()->GetSymbolic() << "." << std::endl;
+                    } else {
+                        std::cerr << "[opendlv-device-camera-spinnaker]: Error: Pixel format MONO8 not available." << std::endl;
+                    }
+                }
+                else {
+                    Spinnaker::GenApi::CEnumEntryPtr ptrPixelFormatYUV = ptrPixelFormat->GetEntryByName("YUV422Packed");
+                    if (IsAvailable(ptrPixelFormatYUV) && IsReadable(ptrPixelFormatYUV)) {
+                        // Retrieve the integer value from the entry node:
+                        int64_t pixelFormatYUV = ptrPixelFormatYUV->GetValue();
+
+                        // Set integer as new value for enumeration node
+                        ptrPixelFormat->SetIntValue(pixelFormatYUV);
+
+                        std::clog << "[opendlv-device-camera-spinnaker]: Pixel format set to " << ptrPixelFormat->GetCurrentEntry()->GetSymbolic() << "." << std::endl;
+                    } else {
+                        std::cerr << "[opendlv-device-camera-spinnaker]: Error: Pixel format YUV422Packed not available." << std::endl;
+                    }
                 }
             } else {
                 std::cerr << "[opendlv-device-camera-spinnaker]: Error: Pixel format not available." << std::endl;
@@ -200,7 +218,9 @@ int32_t main(int32_t argc, char **argv) {
             camera->GainAuto.SetValue(Spinnaker::GainAutoEnums::GainAuto_Continuous);
 
             // Enable auto white balance.
-            camera->BalanceWhiteAuto.SetValue(Spinnaker::BalanceWhiteAutoEnums::BalanceWhiteAuto_Continuous);
+            if (!MONO8) {
+                camera->BalanceWhiteAuto.SetValue(Spinnaker::BalanceWhiteAutoEnums::BalanceWhiteAuto_Continuous);
+            }
 
             // Enable PTP.
             try {
@@ -247,14 +267,21 @@ int32_t main(int32_t argc, char **argv) {
                         std::clog << "Grabbed frame of size " << width << "x" << height << " at " << imageTimestamp << std::endl;
                     }
                     cluon::data::TimeStamp ts{cluon::time::now()};
-		    if (!NOCAMERATIMESTAMP) {
+                    if (!NOCAMERATIMESTAMP) {
                         ts = cluon::time::fromMicroseconds(imageTimestamp/1000);
-		    }
+                    }
 
                     if ((static_cast<uint32_t>(width) == WIDTH) && (static_cast<uint32_t>(height) == HEIGHT)) {
                         sharedMemoryI420->lock();
                         sharedMemoryI420->setTimeStamp(ts);
-                        {
+                        if (MONO8) {
+                            libyuv::I400ToI420(reinterpret_cast<uint8_t *>(image->GetData()), WIDTH /* use monochrome channel only */,
+                                               reinterpret_cast<uint8_t *>(sharedMemoryI420->data()), WIDTH,
+                                               reinterpret_cast<uint8_t *>(sharedMemoryI420->data() + (WIDTH * HEIGHT)), WIDTH / 2,
+                                               reinterpret_cast<uint8_t *>(sharedMemoryI420->data() + (WIDTH * HEIGHT + ((WIDTH * HEIGHT) >> 2))), WIDTH / 2,
+                                               WIDTH, HEIGHT);
+                        }
+                        else {
                             libyuv::UYVYToI420(reinterpret_cast<uint8_t *>(image->GetData()), WIDTH * 2 /* 2*WIDTH for YUYV 422*/,
                                                reinterpret_cast<uint8_t *>(sharedMemoryI420->data()), WIDTH,
                                                reinterpret_cast<uint8_t *>(sharedMemoryI420->data() + (WIDTH * HEIGHT)), WIDTH / 2,
@@ -294,7 +321,6 @@ int32_t main(int32_t argc, char **argv) {
 
             // Release any resources.
             camera->DeInit();
-            camera = NULL;
             listOfInterfaces.Clear();
             system->ReleaseInstance();
         }
