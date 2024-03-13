@@ -1,3 +1,5 @@
+Moved to https://git.opendlv.org.
+
 ## OpenDLV Microservice to interface with Spinnaker-supported cameras (e.g., PtGrey GiGE cameras)
 
 This repository provides source code to interface Spinnaker-supported cameras
